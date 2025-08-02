@@ -9,8 +9,15 @@ struct QuickSnapshotTest {
 
         @Test("Generate ContentView Snapshot") 
     func generateContentViewSnapshot() async throws {
-        // Now test against the recorded snapshot (record mode off)
         let view = ContentView()
-        assertSnapshot(of: view, as: .image(layout: .device(config: .iPhone13ProMax)))
+        
+        // Always record in CI for ScreenshotBot demo
+        if ProcessInfo.processInfo.environment["CI"] != nil {
+            withSnapshotTesting(record: .all) {
+                assertSnapshot(of: view, as: .image(layout: .device(config: .iPhone13ProMax)))
+            }
+        } else {
+            assertSnapshot(of: view, as: .image(layout: .device(config: .iPhone13ProMax)))
+        }
     }
 }

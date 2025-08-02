@@ -7,14 +7,14 @@ import SnapshotTesting
 /// Change RECORD_MODE to true/false to control recording vs verification
 @MainActor
 struct WorkingSnapshotTests {
-    
-    // 🎛️ TOGGLE THIS TO CONTROL RECORD MODE
-    private let RECORD_MODE = false  // Set to true to record, false to verify
-    
-    @Test("ContentView Snapshot") 
+
+    // 🎛️ RECORD MODE: Always record in CI for ScreenshotBot demo
+    private let RECORD_MODE = ProcessInfo.processInfo.environment["CI"] != nil
+
+    @Test("ContentView Snapshot")
     func contentViewSnapshot() async throws {
         let view = ContentView()
-        
+
         if RECORD_MODE {
             withSnapshotTesting(record: .all) {
                 assertSnapshot(of: view, as: .image(layout: .device(config: .iPhone13ProMax)))
@@ -24,11 +24,11 @@ struct WorkingSnapshotTests {
         }
     }
 
-    @Test("ContentView Dark Mode") 
+    @Test("ContentView Dark Mode")
     func contentViewDarkMode() async throws {
         let view = ContentView()
             .preferredColorScheme(.dark)
-        
+
         if RECORD_MODE {
             withSnapshotTesting(record: .all) {
                 assertSnapshot(of: view, as: .image(layout: .device(config: .iPhone13ProMax)))
@@ -38,11 +38,11 @@ struct WorkingSnapshotTests {
         }
     }
 
-    @Test("Settings View Dark Mode") 
+    @Test("Settings View Dark Mode")
     func settingsViewDarkMode() async throws {
         let view = SettingsView()
             .preferredColorScheme(.dark)
-        
+
         if RECORD_MODE {
             withSnapshotTesting(record: .all) {
                 assertSnapshot(of: view, as: .image(layout: .device(config: .iPhone13ProMax)))
@@ -52,10 +52,10 @@ struct WorkingSnapshotTests {
         }
     }
 
-    @Test("Dashboard View") 
+    @Test("Dashboard View")
     func dashboardViewSnapshot() async throws {
         let view = DashboardView()
-        
+
         if RECORD_MODE {
             withSnapshotTesting(record: .all) {
                 assertSnapshot(of: view, as: .image(layout: .device(config: .iPhone13ProMax)))
@@ -65,10 +65,10 @@ struct WorkingSnapshotTests {
         }
     }
 
-    @Test("Products View") 
+    @Test("Products View")
     func productsViewSnapshot() async throws {
         let view = ProductsView()
-        
+
         if RECORD_MODE {
             withSnapshotTesting(record: .all) {
                 assertSnapshot(of: view, as: .image(layout: .device(config: .iPhone13ProMax)))
@@ -78,7 +78,7 @@ struct WorkingSnapshotTests {
         }
     }
 
-    @Test("MetricCard Component") 
+    @Test("MetricCard Component")
     func metricCardSnapshot() async throws {
         let view = MetricCard(
             title: "Total Revenue",
@@ -88,7 +88,7 @@ struct WorkingSnapshotTests {
         )
         .frame(width: 300, height: 120)
         .padding()
-        
+
         if RECORD_MODE {
             withSnapshotTesting(record: .all) {
                 assertSnapshot(of: view, as: .image)
