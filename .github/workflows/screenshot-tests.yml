@@ -44,6 +44,7 @@ jobs:
           -scheme ScreenshotbotDemo \
           -configuration Debug \
           -sdk iphonesimulator \
+          -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
           PROVISIONING_PROFILE="" \
@@ -56,6 +57,7 @@ jobs:
           -scheme ScreenshotbotDemo \
           -configuration Debug \
           -sdk iphonesimulator \
+          -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' \
           -resultBundlePath TestResults \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
