@@ -9,7 +9,7 @@ import SnapshotTesting
 struct WorkingSnapshotTests {
 
     // 🎛️ RECORD MODE: Always record in CI for ScreenshotBot demo
-    private let RECORD_MODE = ProcessInfo.processInfo.environment["CI"] != nil
+    private let RECORD_MODE = true  // Force recording for ScreenshotBot demo
 
     @Test("ContentView Snapshot")
     func contentViewSnapshot() async throws {
