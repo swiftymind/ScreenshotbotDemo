@@ -1,0 +1,85 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Description of what the lane does"
+  lane :tests do
+    # Run unit tests and snapshot tests
+    run_tests(
+      workspace: "ScreenshotbotDemo.xcworkspace",
+      scheme: "ScreenshotbotDemo",
+      devices: ["iPhone 16 Pro"],
+      clean: true
+    )
+  end
+
+  desc "Install ScreenshotBot CLI"
+  lane :fetch_screenshotbot do
+    sh "curl https://cdn.screenshotbot.io/recorder.sh | sh"
+  end
+
+  desc "Upload all snapshot directories to ScreenshotBot"
+  lane :screenshotbot_upload_all do
+    # For each __Snapshots__ directory, load it to screenshotbot
+    Dir.glob("../**/__Snapshots__/").each do |dir|
+      channel_name = dir[3..-"/__Snapshots__/".length + 1]
+      sh "~/screenshotbot/recorder --channel #{channel_name} --directory #{dir} --recursive"
+    end
+  end
+
+  desc "Run tests and upload to ScreenshotBot"
+  lane :screenshotbot_ci do
+    # Run the tests first
+    tests
+
+    # Fetch ScreenshotBot CLI
+    fetch_screenshotbot
+
+    # Upload all screenshots
+    screenshotbot_upload_all
+  end
+
+  desc "Demo lane for ScreenshotBot - runs tests and shows integration"
+  lane :demo do
+    UI.message "🎬 Starting ScreenshotBot Demo..."
+
+    # Clean and build the project
+    UI.message "📱 Building the demo app..."
+    gym(
+      scheme: "ScreenshotbotDemo",
+      export_method: "development",
+      skip_codesigning: true,
+      skip_archive: true,
+      destination: "generic/platform=iOS Simulator"
+    )
+
+    # Run snapshot tests
+    UI.message "📸 Running snapshot tests..."
+    tests
+
+    # Set up ScreenshotBot
+    UI.message "🤖 Setting up ScreenshotBot integration..."
+    fetch_screenshotbot
+
+    # Upload screenshots
+    UI.message "☁️ Uploading screenshots to ScreenshotBot..."
+    screenshotbot_upload_all
+
+    UI.success "✅ ScreenshotBot Demo completed successfully!"
+    UI.message "🔗 Check your ScreenshotBot dashboard for the uploaded screenshots"
+  end
+end
