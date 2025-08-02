@@ -75,7 +75,7 @@ jobs:
           echo "Processing directory: $snapshots_dir"
 
           # Extract channel name from path
-          channel_name=$(echo "$snapshots_dir" | sed 's|^\\./||' | sed 's|Tests.*/__Snapshots__.*||' | sed 's|/__Snapshots__.*||')
+          channel_name=$(echo "$snapshots_dir" | sed 's|^\./||' | sed 's|Tests.*/__Snapshots__.*||' | sed 's|/__Snapshots__.*||')
 
           # If channel_name is empty, use a default
           if [ -z "$channel_name" ]; then
