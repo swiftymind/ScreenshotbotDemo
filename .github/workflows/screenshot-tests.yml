@@ -43,7 +43,11 @@ jobs:
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
           -configuration Debug \
-          CODE_SIGNING_REQUIRED=NO
+          -sdk iphonesimulator \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY="" \
+          PROVISIONING_PROFILE="" \
+          CODE_SIGNING_ALLOWED=NO
 
     - name: Run Screenshot Tests
       run: |
@@ -51,8 +55,12 @@ jobs:
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
           -configuration Debug \
+          -sdk iphonesimulator \
           -resultBundlePath TestResults \
-          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY="" \
+          PROVISIONING_PROFILE="" \
+          CODE_SIGNING_ALLOWED=NO
 
     - name: Install ScreenshotBot CLI
       run: |
