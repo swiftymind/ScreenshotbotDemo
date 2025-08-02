@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, develop, feature/demo-ready ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
 
 jobs:
   screenshot-tests:
@@ -25,13 +25,13 @@ jobs:
       with:
         xcode-version: '16.2'
 
-    - name: Cache Swift Package Manager
+    - name: Cache DerivedData
       uses: actions/cache@v4
       with:
-        path: .build
-        key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+        path: ~/Library/Developer/Xcode/DerivedData
+        key: ${{ runner.os }}-deriveddata-${{ hashFiles('**/*.swift', '**/*.h', '**/*.m') }}
         restore-keys: |
-          ${{ runner.os }}-spm-
+          ${{ runner.os }}-deriveddata-
 
     - name: Fetch main branch for ScreenshotBot
       run: |
@@ -66,8 +66,8 @@ jobs:
         find . -name "__Snapshots__" -type d | while read snapshots_dir; do
           echo "Processing directory: $snapshots_dir"
 
-          # Extract channel name from path
-          channel_name=$(echo "$snapshots_dir" | sed 's|^\\./||' | sed 's|Tests.*/__Snapshots__.*||' | sed 's|/__Snapshots__.*||')
+          # Extract channel name from path (fixed escaping)
+          channel_name=$(echo "$snapshots_dir" | sed 's|^\./||' | sed 's|Tests.*/__Snapshots__.*||' | sed 's|/__Snapshots__.*||')
 
           # If channel_name is empty, use a default
           if [ -z "$channel_name" ]; then
@@ -86,14 +86,14 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: test-results
+        name: test-results-${{ github.sha }}
         path: TestResults
 
     - name: Upload Screenshots as Artifacts (for debugging)
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: generated-screenshots
+        name: generated-screenshots-${{ github.sha }}
         path: "**/__Snapshots__/"
 
   demo-workflow:
