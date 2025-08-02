@@ -42,19 +42,25 @@ jobs:
         xcodebuild build \
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
           -configuration Debug \
-          CODE_SIGNING_REQUIRED=NO
+          -sdk iphonesimulator \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY="" \
+          PROVISIONING_PROFILE="" \
+          CODE_SIGNING_ALLOWED=NO
 
     - name: Run Screenshot Tests
       run: |
         xcodebuild test \
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
           -configuration Debug \
+          -sdk iphonesimulator \
           -resultBundlePath TestResults \
-          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGN_IDENTITY="" \
+          PROVISIONING_PROFILE="" \
+          CODE_SIGNING_ALLOWED=NO
 
     - name: Install ScreenshotBot CLI
       run: |
@@ -62,20 +68,13 @@ jobs:
 
     - name: Upload Screenshots to ScreenshotBot
       run: |
-        # Find all __Snapshots__ directories and upload them
         find . -name "__Snapshots__" -type d | while read snapshots_dir; do
           echo "Processing directory: $snapshots_dir"
-
-          # Extract channel name from path (fixed escaping)
           channel_name=$(echo "$snapshots_dir" | sed 's|^\./||' | sed 's|Tests.*/__Snapshots__.*||' | sed 's|/__Snapshots__.*||')
-
-          # If channel_name is empty, use a default
           if [ -z "$channel_name" ]; then
             channel_name="ios-demo-app"
           fi
-
           echo "Uploading to channel: $channel_name"
-
           ~/screenshotbot/recorder \
             --channel "$channel_name" \
             --directory "$snapshots_dir" \
