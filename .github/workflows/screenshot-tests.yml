@@ -1,0 +1,123 @@
+name: Screenshot Tests with ScreenshotBot
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  screenshot-tests:
+    runs-on: macos-latest
+
+    env:
+      SCREENSHOTBOT_API_KEY: ${{ secrets.SCREENSHOTBOT_API_KEY }}
+      SCREENSHOTBOT_API_SECRET: ${{ secrets.SCREENSHOTBOT_API_SECRET }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '16.4'
+
+    - name: Cache Swift Package Manager
+      uses: actions/cache@v4
+      with:
+        path: .build
+        key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+        restore-keys: |
+          ${{ runner.os }}-spm-
+
+    - name: Fetch main branch for ScreenshotBot
+      run: |
+        git fetch origin main
+
+    - name: Resolve Swift Package Dependencies
+      run: |
+        swift package resolve
+
+    - name: Build the project
+      run: |
+        xcodebuild build \
+          -scheme ScreenshotbotDemo \
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+          -configuration Debug \
+          CODE_SIGNING_REQUIRED=NO
+
+    - name: Run Screenshot Tests
+      run: |
+        xcodebuild test \
+          -scheme ScreenshotbotDemo \
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+          -configuration Debug \
+          -resultBundlePath TestResults \
+          CODE_SIGNING_REQUIRED=NO
+
+    - name: Install ScreenshotBot CLI
+      run: |
+        curl https://cdn.screenshotbot.io/recorder.sh | sh
+
+    - name: Upload Screenshots to ScreenshotBot
+      run: |
+        # Find all __Snapshots__ directories and upload them
+        find . -name "__Snapshots__" -type d | while read snapshots_dir; do
+          echo "Processing directory: $snapshots_dir"
+
+          # Extract channel name from path
+          channel_name=$(echo "$snapshots_dir" | sed 's|^\./||' | sed 's|Tests.*/__Snapshots__.*||' | sed 's|/__Snapshots__.*||')
+
+          # If channel_name is empty, use a default
+          if [ -z "$channel_name" ]; then
+            channel_name="ios-demo-app"
+          fi
+
+          echo "Uploading to channel: $channel_name"
+
+          ~/screenshotbot/recorder \
+            --channel "$channel_name" \
+            --directory "$snapshots_dir" \
+            --recursive
+        done
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: TestResults
+
+    - name: Upload Screenshots as Artifacts (for debugging)
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: generated-screenshots
+        path: "**/__Snapshots__/"
+
+  demo-workflow:
+    runs-on: macos-latest
+    if: github.ref == 'refs/heads/demo'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '16.4'
+
+    - name: Install Fastlane
+      run: |
+        sudo gem install fastlane
+
+    - name: Run ScreenshotBot Demo
+      env:
+        SCREENSHOTBOT_API_KEY: ${{ secrets.SCREENSHOTBOT_API_KEY }}
+        SCREENSHOTBOT_API_SECRET: ${{ secrets.SCREENSHOTBOT_API_SECRET }}
+      run: |
+        fastlane demo
