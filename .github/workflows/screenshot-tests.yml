@@ -29,9 +29,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/Library/Developer/Xcode/DerivedData
-        key: ${{ runner.os }}-deriveddata-${{ hashFiles('**/*.swift', '**/*.h', '**/*.m') }}
+        key: ${{ runner.os }}-xcode-deriveddata-${{ hashFiles('**/*.swift', '**/*.h', '**/*.m', '**/*.mm') }}
         restore-keys: |
-          ${{ runner.os }}-deriveddata-
+          ${{ runner.os }}-xcode-deriveddata-
 
     - name: Fetch main branch for ScreenshotBot
       run: |
@@ -42,9 +42,9 @@ jobs:
         xcodebuild build \
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
+          -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' \
           -configuration Debug \
           -sdk iphonesimulator \
-          -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
           PROVISIONING_PROFILE="" \
@@ -55,10 +55,10 @@ jobs:
         xcodebuild test \
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
-          -configuration Debug \
-          -sdk iphonesimulator \
           -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' \
+          -configuration Debug \
           -resultBundlePath TestResults \
+          -sdk iphonesimulator \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGN_IDENTITY="" \
           PROVISIONING_PROFILE="" \
@@ -70,13 +70,20 @@ jobs:
 
     - name: Upload Screenshots to ScreenshotBot
       run: |
+        # Find all __Snapshots__ directories and upload them
         find . -name "__Snapshots__" -type d | while read snapshots_dir; do
           echo "Processing directory: $snapshots_dir"
-          channel_name=$(echo "$snapshots_dir" | sed 's|^\./||' | sed 's|Tests.*/__Snapshots__.*||' | sed 's|/__Snapshots__.*||')
+
+          # Extract channel name from path
+          channel_name=$(echo "$snapshots_dir" | sed 's|^\\./||' | sed 's|Tests.*/__Snapshots__.*||' | sed 's|/__Snapshots__.*||')
+
+          # If channel_name is empty, use a default
           if [ -z "$channel_name" ]; then
             channel_name="ios-demo-app"
           fi
+
           echo "Uploading to channel: $channel_name"
+
           ~/screenshotbot/recorder \
             --channel "$channel_name" \
             --directory "$snapshots_dir" \
