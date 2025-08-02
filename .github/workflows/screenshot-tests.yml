@@ -40,6 +40,7 @@ jobs:
     - name: Build the project
       run: |
         xcodebuild build \
+          -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
           -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
           -configuration Debug \
@@ -48,6 +49,7 @@ jobs:
     - name: Run Screenshot Tests
       run: |
         xcodebuild test \
+          -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
           -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
           -configuration Debug \
