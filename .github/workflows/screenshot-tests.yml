@@ -23,12 +23,15 @@ jobs:
       run: |
         pwd
         ls -la
+        echo "=== Root directory ==="
+        find . -maxdepth 2 -name "*.xcodeproj" -o -name "*.xcworkspace"
+        echo "=== ScreenshotbotDemo directory ==="
         ls -la ScreenshotbotDemo/
-        ls -la ScreenshotbotDemo/ScreenshotbotDemo.xcworkspace
+        find ScreenshotbotDemo/ -maxdepth 2 -name "*.xcodeproj" -o -name "*.xcworkspace"
 
     - name: List available schemes
       run: |
-        xcodebuild -workspace ScreenshotbotDemo/ScreenshotbotDemo.xcworkspace -list
+        xcodebuild -project ScreenshotbotDemo/ScreenshotbotDemo.xcodeproj -list
 
     - name: List available simulators
       run: |
@@ -38,7 +41,7 @@ jobs:
       run: |
         cd ScreenshotbotDemo
         xcodebuild test \
-          -workspace ScreenshotbotDemo.xcworkspace \
+          -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
           -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
           -enableCodeCoverage YES \
