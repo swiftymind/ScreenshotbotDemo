@@ -49,10 +49,12 @@ jobs:
 
     - name: Upload test artifacts
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # Updated to v4
       with:
         name: test-results
         path: |
           DerivedData/Logs/Test/
           DerivedData/Logs/Test/*.png
           DerivedData/Logs/Test/*.jpg
+        if-no-files-found: warn  # Added to handle cases with no files
+        retention-days: 30  # Added to set retention period
