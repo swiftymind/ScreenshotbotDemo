@@ -1,4 +1,4 @@
-name: SwiftTesting CI
+name: Screenshotbot CI
 
 on:
   push:
@@ -49,9 +49,6 @@ jobs:
       env:
         SNAPSHOT_TESTING_RECORD: true
       run: |
-        echo "=== Running Swift Tests ==="
-        swift test --enable-code-coverage
-        
         echo "=== Running Xcode Tests ==="
         xcodebuild test \
           -project ScreenshotbotDemo.xcodeproj \
@@ -60,6 +57,21 @@ jobs:
           -enableCodeCoverage YES \
           -derivedDataPath DerivedData \
           -resultBundlePath TestResults.xcresult
+
+    - name: Extract test logs
+      if: always()
+      run: |
+        echo "=== Test Summary ==="
+        if [ -f "TestResults.xcresult" ]; then
+          # Use the new xcresulttool syntax
+          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq '.actions._values[]?.actionResult.testsRef?.id' | head -5
+          
+          echo "=== Test Failure Details ==="
+          # Get test failure summaries using the new syntax
+          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName): \(.message)"' || echo "No test failures found"
+        else
+          echo "No test results bundle found"
+        fi
 
     - name: Find generated files
       if: always()
@@ -75,16 +87,39 @@ jobs:
         
         echo "=== Checking for attachment directories ==="
         find DerivedData -type d -name "Attachments" | head -10
+        
+        echo "=== Listing all test result files ==="
+        find DerivedData -name "*.xcresult" -o -name "*.log" | head -10
 
-    - name: Upload all artifacts
+    - name: Upload reference images
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: all-artifacts
+        name: reference-images
         path: |
           **/__Snapshots__/
-          DerivedData/
+        if-no-files-found: warn
+        retention-days: 30
+
+    - name: Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: |
+          DerivedData/Logs/Test/
           TestResults.xcresult
+        if-no-files-found: warn
+        retention-days: 30
+
+    - name: Upload screenshots
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: screenshots
+        path: |
+          DerivedData/**/*.png
+          DerivedData/**/*.jpg
         if-no-files-found: warn
         retention-days: 30
 
@@ -94,13 +129,40 @@ jobs:
         echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
+        if [ -f "TestResults.xcresult" ]; then
+          echo "### Test Failures" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName)"' >> $GITHUB_STEP_SUMMARY || echo "No test failures found" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "No test results bundle found" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- Reference images: [Download](../actions/runs/${{ github.run_id }}/artifacts/${{ github.run_attempt }})" >> $GITHUB_STEP_SUMMARY
+        echo "- Test results: [Download](../actions/runs/${{ github.run_id }}/artifacts/${{ github.run_attempt }})" >> $GITHUB_STEP_SUMMARY
+        echo "- Screenshots: [Download](../actions/runs/${{ github.run_id }}/artifacts/${{ github.run_attempt }})" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
         if [ "${{ job.status }}" == "success" ]; then
           echo "✅ Build completed successfully" >> $GITHUB_STEP_SUMMARY
         else
-          echo "⚠️ Build completed with issues" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ Build completed with test failures" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Download the 'all-artifacts' from this build" >> $GITHUB_STEP_SUMMARY
-          echo "2. Look for generated reference images" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the artifacts from this build" >> $GITHUB_STEP_SUMMARY
+          echo "2. Look for generated reference images in the 'reference-images' artifact" >> $GITHUB_STEP_SUMMARY
           echo "3. Commit any reference images to your repository" >> $GITHUB_STEP_SUMMARY
+          echo "4. Check the 'screenshots' artifact for captured images" >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Mark build status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Build completed successfully"
+        else
+          echo "⚠️ Build completed with test failures"
+          echo "Download the artifacts to see generated reference images"
         fi
