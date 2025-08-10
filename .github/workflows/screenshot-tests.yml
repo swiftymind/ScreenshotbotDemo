@@ -75,12 +75,40 @@ jobs:
         echo "=== Checking test attachment directories ==="
         find DerivedData -type d -name "Attachments" | head -5
 
-    - name: Run Screenshotbot
+    - name: Download and Run Screenshotbot
       continue-on-error: true
       if: always()
       run: |
-        curl -L -o screenshotbot "https://github.com/screenshotbot/screenshotbot-cli/releases/latest/download/screenshotbot-macos"
+        echo "=== Downloading Screenshotbot CLI ==="
+        # Get the latest release version
+        LATEST_VERSION=$(curl -s https://api.github.com/repos/screenshotbot/screenshotbot-cli/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+        echo "Latest version: $LATEST_VERSION"
+        
+        # Download the CLI
+        curl -L -o screenshotbot "https://github.com/screenshotbot/screenshotbot-cli/releases/download/$LATEST_VERSION/screenshotbot-macos"
+        
+        # Check if download was successful
+        if [ ! -f "screenshotbot" ]; then
+          echo "Error: Failed to download Screenshotbot CLI"
+          exit 1
+        fi
+        
+        # Check file type and size
+        file screenshotbot
+        ls -la screenshotbot
+        
+        # Make it executable
         chmod +x screenshotbot
+        
+        # Verify it's a valid executable
+        if ! ./screenshotbot --help > /dev/null 2>&1; then
+          echo "Error: Downloaded file is not a valid Screenshotbot CLI executable"
+          echo "File content:"
+          head -c 100 screenshotbot
+          exit 1
+        fi
+        
+        echo "=== Running Screenshotbot ==="
         ./screenshotbot \
           --api-key=${{ secrets.SCREENSHOTBOT_API_KEY }} \
           --channel=ci \
