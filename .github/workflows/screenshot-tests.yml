@@ -25,13 +25,12 @@ jobs:
         ls -la
         echo "=== Root directory ==="
         find . -maxdepth 2 -name "*.xcodeproj" -o -name "*.xcworkspace"
-        echo "=== ScreenshotbotDemo directory ==="
-        ls -la ScreenshotbotDemo/
-        find ScreenshotbotDemo/ -maxdepth 2 -name "*.xcodeproj" -o -name "*.xcworkspace"
+        echo "=== All directories ==="
+        find . -type d -maxdepth 2
 
     - name: List available schemes
       run: |
-        xcodebuild -project ScreenshotbotDemo/ScreenshotbotDemo.xcodeproj -list
+        xcodebuild -project ScreenshotbotDemo.xcodeproj -list
 
     - name: List available simulators
       run: |
@@ -39,7 +38,6 @@ jobs:
 
     - name: Build and Test
       run: |
-        cd ScreenshotbotDemo
         xcodebuild test \
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
@@ -49,8 +47,8 @@ jobs:
 
     - name: Find screenshots
       run: |
-        find ScreenshotbotDemo/DerivedData -name "*.png" -type f
-        find ScreenshotbotDemo/DerivedData -name "*.jpg" -type f
+        find DerivedData -name "*.png" -type f
+        find DerivedData -name "*.jpg" -type f
 
     - name: Run Screenshotbot
       run: |
@@ -59,7 +57,7 @@ jobs:
         ./screenshotbot \
           --api-key=${{ secrets.SCREENSHOTBOT_API_KEY }} \
           --channel=ci \
-          --directory=ScreenshotbotDemo/DerivedData/Logs/Test \
+          --directory=DerivedData/Logs/Test \
           --fail-on-regression=true
 
     - name: Upload test artifacts
@@ -68,8 +66,8 @@ jobs:
       with:
         name: test-results
         path: |
-          ScreenshotbotDemo/DerivedData/Logs/Test/
-          ScreenshotbotDemo/DerivedData/Logs/Test/*.png
-          ScreenshotbotDemo/DerivedData/Logs/Test/*.jpg
+          DerivedData/Logs/Test/
+          DerivedData/Logs/Test/*.png
+          DerivedData/Logs/Test/*.jpg
         if-no-files-found: warn
         retention-days: 30
