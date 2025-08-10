@@ -1,4 +1,4 @@
-name: Screenshotbot CI
+name: SwiftTesting CI
 
 on:
   push:
@@ -36,17 +36,23 @@ jobs:
       run: |
         xcrun simctl list devices available
 
-    - name: Build and Test with SwiftTesting
+    - name: Build project
+      run: |
+        xcodebuild build \
+          -project ScreenshotbotDemo.xcodeproj \
+          -scheme ScreenshotbotDemo \
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5' \
+          -derivedDataPath DerivedData
+
+    - name: Run tests with record mode
       continue-on-error: true
       env:
-        SNAPSHOT_TESTING_RECORD: true  # Enable record mode to generate reference images
+        SNAPSHOT_TESTING_RECORD: true
       run: |
-        # Use swift test command for SwiftTesting
-        swift test \
-          --enable-code-coverage \
-          --parallel
+        echo "=== Running Swift Tests ==="
+        swift test --enable-code-coverage
         
-        # Also try with xcodebuild to ensure compatibility
+        echo "=== Running Xcode Tests ==="
         xcodebuild test \
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
@@ -55,167 +61,46 @@ jobs:
           -derivedDataPath DerivedData \
           -resultBundlePath TestResults.xcresult
 
-    - name: Extract test logs
+    - name: Find generated files
       if: always()
       run: |
-        echo "=== Test Summary ==="
-        if [ -f "TestResults.xcresult" ]; then
-          # Use the new xcresulttool syntax
-          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq '.actions._values[]?.actionResult.testsRef?.id' | head -5
-          
-          echo "=== Test Failure Details ==="
-          # Get test failure summaries using the new syntax
-          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName): \(.message)"' || echo "No test failures found"
-        else
-          echo "No test results bundle found"
-        fi
-
-    - name: Find screenshots and reference images
-      if: always()
-      run: |
-        echo "=== Finding generated screenshots ==="
-        find DerivedData -name "*.png" -type f | head -10
-        find DerivedData -name "*.jpg" -type f | head -10
+        echo "=== Finding all PNG files ==="
+        find . -name "*.png" -type f | head -20
         
-        echo "=== Checking for reference images ==="
+        echo "=== Finding __Snapshots__ directories ==="
         find . -name "__Snapshots__" -type d
-        find . -path "*/__Snapshots__/*.png" | head -5 || echo "No reference images found"
         
-        echo "=== Checking test attachment directories ==="
-        find DerivedData -type d -name "Attachments" | head -5
-        echo "=== Listing all PNG files in DerivedData ==="
-        find DerivedData -name "*.png" | head -10
+        echo "=== Checking DerivedData structure ==="
+        find DerivedData -type d -name "*Test*" | head -10
+        
+        echo "=== Checking for attachment directories ==="
+        find DerivedData -type d -name "Attachments" | head -10
 
-    - name: Upload reference images
+    - name: Upload all artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: reference-images
+        name: all-artifacts
         path: |
           **/__Snapshots__/
-        if-no-files-found: warn
-        retention-days: 30
-
-    - name: Download and Run Screenshotbot
-      continue-on-error: true
-      if: always()
-      run: |
-        echo "=== Downloading Screenshotbot CLI ==="
-        # Try to get the latest release version
-        LATEST_VERSION=$(curl -s https://api.github.com/repos/screenshotbot/screenshotbot-cli/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        echo "Latest version: $LATEST_VERSION"
-        
-        # Download the CLI
-        curl -L -o screenshotbot "https://github.com/screenshotbot/screenshotbot-cli/releases/download/$LATEST_VERSION/screenshotbot-macos"
-        
-        # Check if download was successful
-        if [ ! -f "screenshotbot" ]; then
-          echo "Error: Failed to download Screenshotbot CLI"
-          exit 1
-        fi
-        
-        # Check file type
-        file screenshotbot
-        
-        # Check if it's a Mach-O executable
-        if ! file screenshotbot | grep -q "Mach-O"; then
-          echo "Error: Downloaded file is not a Mach-O executable"
-          echo "File content:"
-          head -c 100 screenshotbot
-          exit 1
-        fi
-        
-        # Make it executable
-        chmod +x screenshotbot
-        
-        # Verify it's a valid executable
-        if ! ./screenshotbot --help > /dev/null 2>&1; then
-          echo "Error: Downloaded file is not a valid Screenshotbot CLI executable"
-          echo "File content:"
-          head -c 100 screenshotbot
-          exit 1
-        fi
-        
-        echo "=== Running Screenshotbot ==="
-        # Try multiple directories to find screenshots
-        for dir in "DerivedData/Logs/Test" "DerivedData" "."; do
-          echo "Checking directory: $dir"
-          if [ -d "$dir" ]; then
-            echo "Files in $dir:"
-            ls -la "$dir" | head -10
-            ./screenshotbot \
-              --api-key=${{ secrets.SCREENSHOTBOT_API_KEY }} \
-              --channel=ci \
-              --directory="$dir" \
-              --fail-on-regression=false \
-              --annotation=github-pr
-            if [ $? -eq 0 ]; then
-              echo "Screenshotbot completed successfully"
-              break
-            else
-              echo "Screenshotbot failed for directory: $dir"
-            fi
-          else
-            echo "Directory not found: $dir"
-          fi
-        done
-
-    - name: Upload test artifacts
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results
-        path: |
-          DerivedData/Logs/Test/
+          DerivedData/
           TestResults.xcresult
         if-no-files-found: warn
         retention-days: 30
 
-    - name: Upload screenshots
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: screenshots
-        path: |
-          DerivedData/**/*.png
-          DerivedData/**/*.jpg
-        if-no-files-found: warn
-        retention-days: 30
-
-    - name: Create test summary
+    - name: Create summary
       if: always()
       run: |
-        echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ -f "TestResults.xcresult" ]; then
-          echo "### Test Failures" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName)"' >> $GITHUB_STEP_SUMMARY || echo "No test failures found" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "No test results bundle found" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Screenshotbot Results" >> $GITHUB_STEP_SUMMARY
-        echo "Check the [Screenshotbot dashboard](https://screenshotbot.io) for visual comparison results." >> $GITHUB_STEP_SUMMARY
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
         if [ "${{ job.status }}" == "success" ]; then
           echo "✅ Build completed successfully" >> $GITHUB_STEP_SUMMARY
         else
-          echo "⚠️ Build completed with test failures" >> $GITHUB_STEP_SUMMARY
-          echo "Reference images were generated and uploaded as artifacts. Download and commit them to fix the tests." >> $GITHUB_STEP_SUMMARY
-        fi
-
-    - name: Mark build status
-      if: always()
-      run: |
-        if [ "${{ job.status }}" == "success" ]; then
-          echo "✅ Build completed successfully"
-        else
-          echo "⚠️ Build completed with test failures"
-          echo "Reference images were generated and uploaded as artifacts."
-          echo "Download them and commit to your repository to fix the tests."
+          echo "⚠️ Build completed with issues" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the 'all-artifacts' from this build" >> $GITHUB_STEP_SUMMARY
+          echo "2. Look for generated reference images" >> $GITHUB_STEP_SUMMARY
+          echo "3. Commit any reference images to your repository" >> $GITHUB_STEP_SUMMARY
         fi
