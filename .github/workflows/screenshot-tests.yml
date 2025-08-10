@@ -25,6 +25,8 @@ jobs:
         ls -la
         echo "=== Root directory ==="
         find . -maxdepth 2 -name "*.xcodeproj" -o -name "*.xcworkspace"
+        echo "=== Test directory ==="
+        ls -la ScreenshotbotDemoTests/
 
     - name: List available schemes
       run: |
@@ -35,7 +37,7 @@ jobs:
         xcrun simctl list devices available
 
     - name: Build and Test
-      continue-on-error: true  # Allow workflow to continue even if tests fail
+      continue-on-error: true
       run: |
         xcodebuild test \
           -project ScreenshotbotDemo.xcodeproj \
@@ -46,24 +48,36 @@ jobs:
           -resultBundlePath TestResults.xcresult
 
     - name: Extract test logs
+      if: always()
       run: |
         echo "=== Test Summary ==="
-        xcrun xcresulttool get --path TestResults.xcresult --format json
-        
-        echo "=== Test Failures ==="
-        xcrun xcresulttool get --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[] | "\(.testCaseName): \(.message)"' || echo "No test failures found"
+        if [ -f "TestResults.xcresult" ]; then
+          # Use the new xcresulttool syntax
+          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq '.actions._values[]?.actionResult.testsRef?.id' | head -5
+          
+          echo "=== Test Failure Details ==="
+          # Get test failure summaries using the new syntax
+          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName): \(.message)"' || echo "No test failures found"
+        else
+          echo "No test results bundle found"
+        fi
 
-    - name: Find screenshots
+    - name: Find screenshots and reference images
+      if: always()
       run: |
-        echo "=== Finding screenshots ==="
-        find DerivedData -name "*.png" -type f
-        find DerivedData -name "*.jpg" -type f
+        echo "=== Finding generated screenshots ==="
+        find DerivedData -name "*.png" -type f | head -10
+        find DerivedData -name "*.jpg" -type f | head -10
         
-        echo "=== Checking reference images ==="
-        find . -name "*.png" -type f | grep -i reference || echo "No reference images found"
+        echo "=== Checking for reference images ==="
+        find . -name "*Reference*.png" -o -name "*reference*.png" | head -5 || echo "No reference images found"
+        
+        echo "=== Checking test attachment directories ==="
+        find DerivedData -type d -name "Attachments" | head -5
 
     - name: Run Screenshotbot
-      continue-on-error: true  # Allow workflow to continue even if Screenshotbot fails
+      continue-on-error: true
+      if: always()
       run: |
         curl -L -o screenshotbot "https://github.com/screenshotbot/screenshotbot-cli/releases/latest/download/screenshotbot-macos"
         chmod +x screenshotbot
@@ -81,9 +95,18 @@ jobs:
         name: test-results
         path: |
           DerivedData/Logs/Test/
-          DerivedData/Logs/Test/*.png
-          DerivedData/Logs/Test/*.jpg
           TestResults.xcresult
+        if-no-files-found: warn
+        retention-days: 30
+
+    - name: Upload screenshots
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: screenshots
+        path: |
+          DerivedData/**/*Attachments/**/*.png
+          DerivedData/**/*Attachments/**/*.jpg
         if-no-files-found: warn
         retention-days: 30
 
@@ -101,12 +124,29 @@ jobs:
     - name: Create test summary
       if: always()
       run: |
-        echo "## Test Results" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-        xcrun xcresulttool get --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[] | "❌ \(.testCaseName): \(.message)"' >> $GITHUB_STEP_SUMMARY || echo "✅ All tests passed" >> $GITHUB_STEP_SUMMARY
-        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f "TestResults.xcresult" ]; then
+          echo "### Test Failures" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName)"' >> $GITHUB_STEP_SUMMARY || echo "No test failures found" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "No test results bundle found" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Screenshotbot Results" >> $GITHUB_STEP_SUMMARY
         echo "Check the [Screenshotbot dashboard](https://screenshotbot.io) for visual comparison results." >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Build completed successfully" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "⚠️ Build completed with test failures" >> $GITHUB_STEP_SUMMARY
+          echo "This is expected for the first run or when there are visual changes. Review in Screenshotbot." >> $GITHUB_STEP_SUMMARY
+        fi
 
     - name: Mark build status
       if: always()
@@ -114,5 +154,6 @@ jobs:
         if [ "${{ job.status }}" == "success" ]; then
           echo "✅ Build completed successfully"
         else
-          echo "⚠️ Build completed with test failures - check Screenshotbot for visual regressions"
+          echo "⚠️ Build completed with test failures - this is expected for snapshot tests"
+          echo "Check the Screenshotbot dashboard for visual comparison results"
         fi
