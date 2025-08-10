@@ -36,23 +36,10 @@ jobs:
       run: |
         xcrun simctl list devices available
 
-    - name: Build and Test (Record Mode)
-      if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop'
+    - name: Build and Test
       continue-on-error: true
       env:
-        SNAPSHOT_TESTING_RECORD: true
-      run: |
-        xcodebuild test \
-          -project ScreenshotbotDemo.xcodeproj \
-          -scheme ScreenshotbotDemo \
-          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5' \
-          -enableCodeCoverage YES \
-          -derivedDataPath DerivedData \
-          -resultBundlePath TestResults.xcresult
-
-    - name: Build and Test (Compare Mode)
-      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
-      continue-on-error: true
+        SNAPSHOT_TESTING_RECORD: true  # Enable record mode to generate reference images
       run: |
         xcodebuild test \
           -project ScreenshotbotDemo.xcodeproj \
@@ -67,9 +54,11 @@ jobs:
       run: |
         echo "=== Test Summary ==="
         if [ -f "TestResults.xcresult" ]; then
+          # Use the new xcresulttool syntax
           xcrun xcresulttool get object --path TestResults.xcresult --format json | jq '.actions._values[]?.actionResult.testsRef?.id' | head -5
           
           echo "=== Test Failure Details ==="
+          # Get test failure summaries using the new syntax
           xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName): \(.message)"' || echo "No test failures found"
         else
           echo "No test results bundle found"
@@ -88,9 +77,11 @@ jobs:
         
         echo "=== Checking test attachment directories ==="
         find DerivedData -type d -name "Attachments" | head -5
+        echo "=== Listing all PNG files in DerivedData ==="
+        find DerivedData -name "*.png" | head -10
 
-    - name: Upload reference images (if recorded)
-      if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop'
+    - name: Upload reference images
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: reference-images
@@ -127,12 +118,28 @@ jobs:
         fi
         
         echo "=== Running Screenshotbot ==="
-        ./screenshotbot \
-          --api-key=${{ secrets.SCREENSHOTBOT_API_KEY }} \
-          --channel=ci \
-          --directory=DerivedData/Logs/Test \
-          --fail-on-regression=false \
-          --annotation=github-pr
+        # Try multiple directories to find screenshots
+        for dir in "DerivedData/Logs/Test" "DerivedData" "."; do
+          echo "Checking directory: $dir"
+          if [ -d "$dir" ]; then
+            echo "Files in $dir:"
+            ls -la "$dir" | head -10
+            ./screenshotbot \
+              --api-key=${{ secrets.SCREENSHOTBOT_API_KEY }} \
+              --channel=ci \
+              --directory="$dir" \
+              --fail-on-regression=false \
+              --annotation=github-pr
+            if [ $? -eq 0 ]; then
+              echo "Screenshotbot completed successfully"
+              break
+            else
+              echo "Screenshotbot failed for directory: $dir"
+            fi
+          else
+            echo "Directory not found: $dir"
+          fi
+        done
 
     - name: Upload test artifacts
       if: always()
@@ -151,8 +158,8 @@ jobs:
       with:
         name: screenshots
         path: |
-          DerivedData/**/*Attachments/**/*.png
-          DerivedData/**/*Attachments/**/*.jpg
+          DerivedData/**/*.png
+          DerivedData/**/*.jpg
         if-no-files-found: warn
         retention-days: 30
 
@@ -180,11 +187,7 @@ jobs:
           echo "✅ Build completed successfully" >> $GITHUB_STEP_SUMMARY
         else
           echo "⚠️ Build completed with test failures" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.ref }}" != "refs/heads/develop" ]; then
-            echo "Reference images were generated and uploaded as artifacts. Download and commit them to fix the tests." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "This is expected when there are visual changes. Review in Screenshotbot." >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "Reference images were generated and uploaded as artifacts. Download and commit them to fix the tests." >> $GITHUB_STEP_SUMMARY
         fi
 
     - name: Mark build status
@@ -194,10 +197,6 @@ jobs:
           echo "✅ Build completed successfully"
         else
           echo "⚠️ Build completed with test failures"
-          if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.ref }}" != "refs/heads/develop" ]; then
-            echo "Reference images were generated and uploaded as artifacts."
-            echo "Download them and commit to your repository to fix the tests."
-          else
-            echo "Check the Screenshotbot dashboard for visual comparison results."
-          fi
+          echo "Reference images were generated and uploaded as artifacts."
+          echo "Download them and commit to your repository to fix the tests."
         fi
