@@ -23,10 +23,10 @@ jobs:
       run: |
         pwd
         ls -la
-        echo "=== Root directory ==="
-        find . -maxdepth 2 -name "*.xcodeproj" -o -name "*.xcworkspace"
         echo "=== Test directory ==="
         ls -la ScreenshotbotDemoTests/
+        echo "=== Checking for reference images ==="
+        find . -name "__Snapshots__" -type d || echo "No __Snapshots__ directory found"
 
     - name: List available schemes
       run: |
@@ -36,7 +36,22 @@ jobs:
       run: |
         xcrun simctl list devices available
 
-    - name: Build and Test
+    - name: Build and Test (Record Mode)
+      if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop'
+      continue-on-error: true
+      env:
+        SNAPSHOT_TESTING_RECORD: true
+      run: |
+        xcodebuild test \
+          -project ScreenshotbotDemo.xcodeproj \
+          -scheme ScreenshotbotDemo \
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5' \
+          -enableCodeCoverage YES \
+          -derivedDataPath DerivedData \
+          -resultBundlePath TestResults.xcresult
+
+    - name: Build and Test (Compare Mode)
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
       continue-on-error: true
       run: |
         xcodebuild test \
@@ -52,11 +67,9 @@ jobs:
       run: |
         echo "=== Test Summary ==="
         if [ -f "TestResults.xcresult" ]; then
-          # Use the new xcresulttool syntax
           xcrun xcresulttool get object --path TestResults.xcresult --format json | jq '.actions._values[]?.actionResult.testsRef?.id' | head -5
           
           echo "=== Test Failure Details ==="
-          # Get test failure summaries using the new syntax
           xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName): \(.message)"' || echo "No test failures found"
         else
           echo "No test results bundle found"
@@ -70,18 +83,29 @@ jobs:
         find DerivedData -name "*.jpg" -type f | head -10
         
         echo "=== Checking for reference images ==="
-        find . -name "*Reference*.png" -o -name "*reference*.png" | head -5 || echo "No reference images found"
+        find . -name "__Snapshots__" -type d
+        find . -path "*/__Snapshots__/*.png" | head -5 || echo "No reference images found"
         
         echo "=== Checking test attachment directories ==="
         find DerivedData -type d -name "Attachments" | head -5
+
+    - name: Upload reference images (if recorded)
+      if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop'
+      uses: actions/upload-artifact@v4
+      with:
+        name: reference-images
+        path: |
+          **/__Snapshots__/
+        if-no-files-found: warn
+        retention-days: 30
 
     - name: Download and Run Screenshotbot
       continue-on-error: true
       if: always()
       run: |
         echo "=== Downloading Screenshotbot CLI ==="
-        # Get the latest release version
-        LATEST_VERSION=$(curl -s https://api.github.com/repos/screenshotbot/screenshotbot-cli/releases/latest | grep -oP '"tag_name": "\K(.*)(?=")')
+        # Use a simpler approach to get the latest version
+        LATEST_VERSION=$(curl -s https://api.github.com/repos/screenshotbot/screenshotbot-cli/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
         echo "Latest version: $LATEST_VERSION"
         
         # Download the CLI
@@ -93,18 +117,12 @@ jobs:
           exit 1
         fi
         
-        # Check file type and size
-        file screenshotbot
-        ls -la screenshotbot
-        
         # Make it executable
         chmod +x screenshotbot
         
         # Verify it's a valid executable
         if ! ./screenshotbot --help > /dev/null 2>&1; then
           echo "Error: Downloaded file is not a valid Screenshotbot CLI executable"
-          echo "File content:"
-          head -c 100 screenshotbot
           exit 1
         fi
         
@@ -138,17 +156,6 @@ jobs:
         if-no-files-found: warn
         retention-days: 30
 
-    - name: Upload reference images
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: reference-images
-        path: |
-          **/*Reference*.png
-          **/*reference*.png
-        if-no-files-found: warn
-        retention-days: 30
-
     - name: Create test summary
       if: always()
       run: |
@@ -173,7 +180,11 @@ jobs:
           echo "✅ Build completed successfully" >> $GITHUB_STEP_SUMMARY
         else
           echo "⚠️ Build completed with test failures" >> $GITHUB_STEP_SUMMARY
-          echo "This is expected for the first run or when there are visual changes. Review in Screenshotbot." >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.ref }}" != "refs/heads/develop" ]; then
+            echo "Reference images were generated and uploaded as artifacts. Download and commit them to fix the tests." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "This is expected when there are visual changes. Review in Screenshotbot." >> $GITHUB_STEP_SUMMARY
+          fi
         fi
 
     - name: Mark build status
@@ -182,6 +193,11 @@ jobs:
         if [ "${{ job.status }}" == "success" ]; then
           echo "✅ Build completed successfully"
         else
-          echo "⚠️ Build completed with test failures - this is expected for snapshot tests"
-          echo "Check the Screenshotbot dashboard for visual comparison results"
+          echo "⚠️ Build completed with test failures"
+          if [ "${{ github.ref }}" != "refs/heads/main" ] && [ "${{ github.ref }}" != "refs/heads/develop" ]; then
+            echo "Reference images were generated and uploaded as artifacts."
+            echo "Download them and commit to your repository to fix the tests."
+          else
+            echo "Check the Screenshotbot dashboard for visual comparison results."
+          fi
         fi
