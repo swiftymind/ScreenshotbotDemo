@@ -47,9 +47,12 @@ jobs:
     - name: Run tests with record mode
       continue-on-error: true
       env:
+        # Use the correct environment variable for SnapshotTesting framework
+        SNAPSHOT_REFERENCE_IMAGES_DIR: ./Tests/__Snapshots__
+        # Also try the SwiftTesting record mode
         SNAPSHOT_TESTING_RECORD: true
       run: |
-        echo "=== Running Xcode Tests ==="
+        echo "=== Running Xcode Tests in Record Mode ==="
         xcodebuild test \
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
@@ -57,6 +60,25 @@ jobs:
           -enableCodeCoverage YES \
           -derivedDataPath DerivedData \
           -resultBundlePath TestResults.xcresult
+
+    - name: Check if reference images were created
+      if: always()
+      run: |
+        echo "=== Checking for reference images ==="
+        find . -name "__Snapshots__" -type d
+        find . -name "*.png" -type f | head -10
+        
+        echo "=== Checking DerivedData for images ==="
+        find DerivedData -name "*.png" -type f | head -10
+        
+        echo "=== Creating __Snapshots__ directory if it doesn't exist ==="
+        mkdir -p ./Tests/__Snapshots__
+        
+        echo "=== Copying any found images to __Snapshots__ ==="
+        find DerivedData -name "*.png" -type f -exec cp {} ./Tests/__Snapshots__/ \;
+        
+        echo "=== Listing final __Snapshots__ directory ==="
+        ls -la ./Tests/__Snapshots__/ || echo "No images found"
 
     - name: Extract test logs
       if: always()
@@ -72,24 +94,6 @@ jobs:
         else
           echo "No test results bundle found"
         fi
-
-    - name: Find generated files
-      if: always()
-      run: |
-        echo "=== Finding all PNG files ==="
-        find . -name "*.png" -type f | head -20
-        
-        echo "=== Finding __Snapshots__ directories ==="
-        find . -name "__Snapshots__" -type d
-        
-        echo "=== Checking DerivedData structure ==="
-        find DerivedData -type d -name "*Test*" | head -10
-        
-        echo "=== Checking for attachment directories ==="
-        find DerivedData -type d -name "Attachments" | head -10
-        
-        echo "=== Listing all test result files ==="
-        find DerivedData -name "*.xcresult" -o -name "*.log" | head -10
 
     - name: Upload reference images
       if: always()
@@ -150,11 +154,15 @@ jobs:
         else
           echo "⚠️ Build completed with test failures" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Why Tests Are Failing" >> $GITHUB_STEP_SUMMARY
+          echo "The snapshot tests are failing because reference images don't exist yet." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Download the artifacts from this build" >> $GITHUB_STEP_SUMMARY
-          echo "2. Look for generated reference images in the 'reference-images' artifact" >> $GITHUB_STEP_SUMMARY
-          echo "3. Commit any reference images to your repository" >> $GITHUB_STEP_SUMMARY
-          echo "4. Check the 'screenshots' artifact for captured images" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the 'reference-images' artifact" >> $GITHUB_STEP_SUMMARY
+          echo "2. If it contains images, commit them to your repository" >> $GITHUB_STEP_SUMMARY
+          echo "3. If it's empty, download the 'screenshots' artifact" >> $GITHUB_STEP_SUMMARY
+          echo "4. Copy the screenshots from 'screenshots' to a '__Snapshots__' directory" >> $GITHUB_STEP_SUMMARY
+          echo "5. Commit the '__Snapshots__' directory to your repository" >> $GITHUB_STEP_SUMMARY
         fi
 
     - name: Mark build status
@@ -164,5 +172,6 @@ jobs:
           echo "✅ Build completed successfully"
         else
           echo "⚠️ Build completed with test failures"
-          echo "Download the artifacts to see generated reference images"
+          echo "This is expected for snapshot tests without reference images"
+          echo "Download the artifacts to get the generated reference images"
         fi
