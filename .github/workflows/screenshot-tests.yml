@@ -36,11 +36,17 @@ jobs:
       run: |
         xcrun simctl list devices available
 
-    - name: Build and Test
+    - name: Build and Test with SwiftTesting
       continue-on-error: true
       env:
         SNAPSHOT_TESTING_RECORD: true  # Enable record mode to generate reference images
       run: |
+        # Use swift test command for SwiftTesting
+        swift test \
+          --enable-code-coverage \
+          --parallel
+        
+        # Also try with xcodebuild to ensure compatibility
         xcodebuild test \
           -project ScreenshotbotDemo.xcodeproj \
           -scheme ScreenshotbotDemo \
@@ -95,7 +101,7 @@ jobs:
       if: always()
       run: |
         echo "=== Downloading Screenshotbot CLI ==="
-        # Use a simpler approach to get the latest version
+        # Try to get the latest release version
         LATEST_VERSION=$(curl -s https://api.github.com/repos/screenshotbot/screenshotbot-cli/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
         echo "Latest version: $LATEST_VERSION"
         
@@ -108,12 +114,25 @@ jobs:
           exit 1
         fi
         
+        # Check file type
+        file screenshotbot
+        
+        # Check if it's a Mach-O executable
+        if ! file screenshotbot | grep -q "Mach-O"; then
+          echo "Error: Downloaded file is not a Mach-O executable"
+          echo "File content:"
+          head -c 100 screenshotbot
+          exit 1
+        fi
+        
         # Make it executable
         chmod +x screenshotbot
         
         # Verify it's a valid executable
         if ! ./screenshotbot --help > /dev/null 2>&1; then
           echo "Error: Downloaded file is not a valid Screenshotbot CLI executable"
+          echo "File content:"
+          head -c 100 screenshotbot
           exit 1
         fi
         
