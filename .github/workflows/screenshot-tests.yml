@@ -1,129 +1,58 @@
-name: Screenshot Tests with ScreenshotBot
+name: Screenshotbot CI
 
 on:
   push:
-    branches: [ main, develop, feature/demo-ready ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
 
 jobs:
-  screenshot-tests:
+  build:
     runs-on: macos-latest
-
-    env:
-      SCREENSHOTBOT_API_KEY: ${{ secrets.SCREENSHOTBOT_API_KEY }}
-      SCREENSHOTBOT_API_SECRET: ${{ secrets.SCREENSHOTBOT_API_SECRET }}
+    timeout-minutes: 30
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+    - uses: actions/checkout@v4
 
-    - name: Setup Xcode
+    - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: '16.2'
+        xcode-version: '15.0'
 
-    - name: Cache DerivedData
-      uses: actions/cache@v4
-      with:
-        path: ~/Library/Developer/Xcode/DerivedData
-        key: ${{ runner.os }}-xcode-deriveddata-${{ hashFiles('**/*.swift', '**/*.h', '**/*.m', '**/*.mm') }}
-        restore-keys: |
-          ${{ runner.os }}-xcode-deriveddata-
-
-    - name: Fetch main branch for ScreenshotBot
+    - name: List available schemes
       run: |
-        git fetch origin main
+        xcodebuild -workspace ScreenshotbotDemo.xcworkspace -list
 
-    - name: Build the project
-      run: |
-        xcodebuild build \
-          -project ScreenshotbotDemo.xcodeproj \
-          -scheme ScreenshotbotDemo \
-          -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' \
-          -configuration Debug \
-          -sdk iphonesimulator \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY="" \
-          PROVISIONING_PROFILE="" \
-          CODE_SIGNING_ALLOWED=NO
-
-    - name: Run Screenshot Tests
+    - name: Build and Test
       run: |
         xcodebuild test \
-          -project ScreenshotbotDemo.xcodeproj \
+          -workspace ScreenshotbotDemo.xcworkspace \
           -scheme ScreenshotbotDemo \
-          -destination 'platform=iOS Simulator,name=iPhone SE (3rd generation)' \
-          -configuration Debug \
-          -resultBundlePath TestResults \
-          -sdk iphonesimulator \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGN_IDENTITY="" \
-          PROVISIONING_PROFILE="" \
-          CODE_SIGNING_ALLOWED=NO
+          -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+          -enableCodeCoverage YES \
+          -derivedDataPath DerivedData
 
-    - name: Install ScreenshotBot CLI
+    - name: Find screenshots
       run: |
-        curl https://cdn.screenshotbot.io/recorder.sh | sh
+        find DerivedData -name "*.png" -type f
+        find DerivedData -name "*.jpg" -type f
 
-    - name: Upload Screenshots to ScreenshotBot
+    - name: Run Screenshotbot
       run: |
-        # Find all __Snapshots__ directories and upload them
-        find . -name "__Snapshots__" -type d | while read snapshots_dir; do
-          echo "Processing directory: $snapshots_dir"
+        curl -L -o screenshotbot "https://github.com/screenshotbot/screenshotbot-cli/releases/latest/download/screenshotbot-macos"
+        chmod +x screenshotbot
+        ./screenshotbot \
+          --api-key=${{ secrets.SCREENSHOTBOT_API_KEY }} \
+          --channel=ci \
+          --directory=DerivedData/Logs/Test \
+          --fail-on-regression=true
 
-          # Extract channel name from path
-          channel_name=$(echo "$snapshots_dir" | sed 's|^\./||' | sed 's|Tests.*/__Snapshots__.*||' | sed 's|/__Snapshots__.*||')
-
-          # If channel_name is empty, use a default
-          if [ -z "$channel_name" ]; then
-            channel_name="ios-demo-app"
-          fi
-
-          echo "Uploading to channel: $channel_name"
-
-          ~/screenshotbot/recorder \
-            --channel "$channel_name" \
-            --directory "$snapshots_dir" \
-            --recursive
-        done
-
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v4
+    - name: Upload test artifacts
       if: always()
+      uses: actions/upload-artifact@v3
       with:
-        name: test-results-${{ github.sha }}
-        path: TestResults
-
-    - name: Upload Screenshots as Artifacts (for debugging)
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: generated-screenshots-${{ github.sha }}
-        path: "**/__Snapshots__/"
-
-  demo-workflow:
-    runs-on: macos-latest
-    if: github.ref == 'refs/heads/demo'
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Setup Xcode
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: '16.2'
-
-    - name: Install Fastlane
-      run: |
-        sudo gem install fastlane
-
-    - name: Run ScreenshotBot Demo
-      env:
-        SCREENSHOTBOT_API_KEY: ${{ secrets.SCREENSHOTBOT_API_KEY }}
-        SCREENSHOTBOT_API_SECRET: ${{ secrets.SCREENSHOTBOT_API_SECRET }}
-      run: |
-        fastlane demo
+        name: test-results
+        path: |
+          DerivedData/Logs/Test/
+          DerivedData/Logs/Test/*.png
+          DerivedData/Logs/Test/*.jpg
