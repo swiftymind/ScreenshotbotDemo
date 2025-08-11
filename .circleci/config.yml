@@ -1,0 +1,107 @@
+version: 2.1
+
+orbs:
+  macos: circleci/macos@2
+
+jobs:
+  test_and_screenshot:
+    macos:
+      xcode: 16.4.0
+    environment:
+      FL_OUTPUT_DIR: output
+      FASTLANE_LANE: screenshotbot_ci
+    steps:
+      - checkout
+
+      # Install dependencies
+      - run:
+          name: Install Fastlane
+          command: |
+            brew install fastlane
+
+      # Fetch main branch for ScreenshotBot comparison
+      - run:
+          name: Fetch main branch
+          command: |
+            git fetch origin main
+
+      # Create workspace if using Package.swift
+      - run:
+          name: Generate Xcode workspace
+          command: |
+            swift package generate-xcodeproj
+
+      # Run tests and generate screenshots
+      - run:
+          name: Run Tests
+          command: |
+            xcodebuild test \
+              -scheme ScreenshotbotDemo \
+              -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+              -resultBundlePath test_output \
+              CODE_SIGNING_REQUIRED=NO
+
+      # Install ScreenshotBot CLI
+      - run:
+          name: Install ScreenshotBot CLI
+          command: |
+            curl https://cdn.screenshotbot.io/recorder.sh | sh
+
+      # Upload screenshots to ScreenshotBot
+      - run:
+          name: Upload Screenshots to ScreenshotBot
+          command: |
+            # Find and upload all snapshot directories
+            find . -name "__Snapshots__" -type d | while read dir; do
+              channel_name=$(echo "$dir" | sed 's|.*Tests/||' | sed 's|/__Snapshots__||')
+              ~/screenshotbot/recorder \
+                --channel "$channel_name" \
+                --directory "$dir" \
+                --recursive
+            done
+
+      # Store artifacts
+      - store_artifacts:
+          path: test_output
+          destination: test-results
+
+      - store_test_results:
+          path: test_output
+
+  demo_workflow:
+    macos:
+      xcode: 16.4.0
+    steps:
+      - checkout
+
+      # Install dependencies
+      - run:
+          name: Install Fastlane
+          command: |
+            brew install fastlane
+
+      # Run the demo lane
+      - run:
+          name: Run ScreenshotBot Demo
+          command: |
+            fastlane demo
+
+workflows:
+  version: 2
+  test_and_deploy:
+    jobs:
+      - test_and_screenshot:
+          filters:
+            branches:
+              only:
+                - main
+                - develop
+                - /feature\/.*/
+
+  demo:
+    jobs:
+      - demo_workflow:
+          filters:
+            branches:
+              only:
+                - demo
