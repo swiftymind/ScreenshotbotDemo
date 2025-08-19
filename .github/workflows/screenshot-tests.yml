@@ -12,7 +12,9 @@ jobs:
     timeout-minutes: 30
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
 
     - name: Set up Xcode
       uses: maxim-lobanov/setup-xcode@v1
@@ -61,109 +63,20 @@ jobs:
           -derivedDataPath DerivedData \
           -resultBundlePath TestResults.xcresult
 
-    - name: Check if reference images were created
-      if: always()
+    - name: Install ScreenshotBot CLI
       run: |
-        echo "=== Checking for reference images ==="
-        find . -name "__Snapshots__" -type d
-        find . -name "*.png" -type f | head -10
-        
-        echo "=== Checking DerivedData for images ==="
-        find DerivedData -name "*.png" -type f | head -10
-        
-        echo "=== Creating __Snapshots__ directory if it doesn't exist ==="
-        mkdir -p ./Tests/__Snapshots__
-        
-        echo "=== Copying any found images to __Snapshots__ ==="
-        find DerivedData -name "*.png" -type f -exec cp {} ./Tests/__Snapshots__/ \;
-        
-        echo "=== Listing final __Snapshots__ directory ==="
-        ls -la ./Tests/__Snapshots__/ || echo "No images found"
+        curl https://cdn.screenshotbot.io/recorder.sh | sh
 
-    - name: Extract test logs
-      if: always()
+    - name: Upload Screenshots to ScreenshotBot
       run: |
-        echo "=== Test Summary ==="
-        if [ -f "TestResults.xcresult" ]; then
-          # Use the new xcresulttool syntax
-          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq '.actions._values[]?.actionResult.testsRef?.id' | head -5
-          
-          echo "=== Test Failure Details ==="
-          # Get test failure summaries using the new syntax
-          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName): \(.message)"' || echo "No test failures found"
-        else
-          echo "No test results bundle found"
-        fi
-
-    - name: Upload reference images
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: reference-images
-        path: |
-          **/__Snapshots__/
-        if-no-files-found: warn
-        retention-days: 30
-
-    - name: Upload test artifacts
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results
-        path: |
-          DerivedData/Logs/Test/
-          TestResults.xcresult
-        if-no-files-found: warn
-        retention-days: 30
-
-    - name: Upload screenshots
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: screenshots
-        path: |
-          DerivedData/**/*.png
-          DerivedData/**/*.jpg
-        if-no-files-found: warn
-        retention-days: 30
-
-    - name: Create summary
-      if: always()
-      run: |
-        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ -f "TestResults.xcresult" ]; then
-          echo "### Test Failures" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          xcrun xcresulttool get object --path TestResults.xcresult --format json | jq -r '.issues.testFailureSummaries[]? | "❌ \(.testCaseName)"' >> $GITHUB_STEP_SUMMARY || echo "No test failures found" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "No test results bundle found" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
-        echo "- Reference images: [Download](../actions/runs/${{ github.run_id }}/artifacts/${{ github.run_attempt }})" >> $GITHUB_STEP_SUMMARY
-        echo "- Test results: [Download](../actions/runs/${{ github.run_id }}/artifacts/${{ github.run_attempt }})" >> $GITHUB_STEP_SUMMARY
-        echo "- Screenshots: [Download](../actions/runs/${{ github.run_id }}/artifacts/${{ github.run_attempt }})" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "${{ job.status }}" == "success" ]; then
-          echo "✅ Build completed successfully" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "⚠️ Build completed with test failures" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Why Tests Are Failing" >> $GITHUB_STEP_SUMMARY
-          echo "The snapshot tests are failing because reference images don't exist yet." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Download the 'reference-images' artifact" >> $GITHUB_STEP_SUMMARY
-          echo "2. If it contains images, commit them to your repository" >> $GITHUB_STEP_SUMMARY
-          echo "3. If it's empty, download the 'screenshots' artifact" >> $GITHUB_STEP_SUMMARY
-          echo "4. Copy the screenshots from 'screenshots' to a '__Snapshots__' directory" >> $GITHUB_STEP_SUMMARY
-          echo "5. Commit the '__Snapshots__' directory to your repository" >> $GITHUB_STEP_SUMMARY
-        fi
+        git fetch origin main
+        find . -name "__Snapshots__" -type d | while read dir; do
+          channel_name=$(echo "$dir" | sed 's|.*Tests/||' | sed 's|/__Snapshots__||')
+          ~/screenshotbot/recorder \
+            --channel "$channel_name" \
+            --directory "$dir" \
+            --recursive
+        done
 
     - name: Mark build status
       if: always()
