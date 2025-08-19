@@ -72,6 +72,7 @@ jobs:
         SCREENSHOTBOT_API_KEY: ${{ secrets.SCREENSHOTBOT_API_KEY }}
         SCREENSHOTBOT_API_SECRET: ${{ secrets.SCREENSHOTBOT_API_SECRET }}
       run: |
+        env
         git fetch origin main
         find . -name "__Snapshots__" -type d | while read dir; do
           channel_name=$(echo "$dir" | sed 's|.*Tests/||' | sed 's|/__Snapshots__||')
