@@ -74,6 +74,8 @@ jobs:
         find . -name "__Snapshots__" -type d | while read dir; do
           channel_name=$(echo "$dir" | sed 's|.*Tests/||' | sed 's|/__Snapshots__||')
           ~/screenshotbot/recorder \
+            --api-key "JQN1GO4YRJHN87CXPDF5" \
+            --api-secret "F1pj603iVOmmD8kphUHwRyqYVHJqcIrFznCKSylt" \
             --channel "$channel_name" \
             --directory "$dir" \
             --recursive
