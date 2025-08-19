@@ -61,17 +61,12 @@ jobs:
           -derivedDataPath DerivedData \
           -resultBundlePath TestResults.xcresult
 
-    # Install ScreenshotBot CLI
-    - run:
-      name: Install ScreenshotBot CLI
-      command: |
+    - name: Install ScreenshotBot CLI
+      run: |
         curl https://cdn.screenshotbot.io/recorder.sh | sh
 
-    # Upload screenshots to ScreenshotBot
-    - run:
-      name: Upload Screenshots to ScreenshotBot
-      command: |
-        # Find and upload all snapshot directories
+    - name: Upload Screenshots to ScreenshotBot
+      run: |
         find . -name "__Snapshots__" -type d | while read dir; do
           channel_name=$(echo "$dir" | sed 's|.*Tests/||' | sed 's|/__Snapshots__||')
           ~/screenshotbot/recorder \
