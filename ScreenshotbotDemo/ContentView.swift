@@ -83,7 +83,7 @@ struct DashboardView: View {
                         MetricCard(title: "Total Sales", value: "$12,345", trend: "+12%", color: .green)
                         MetricCard(title: "New Users", value: "1,234", trend: "+8%", color: .blue)
                         MetricCard(title: "Revenue", value: "$45,678", trend: "+15%", color: .purple)
-                        MetricCard(title: "Orders", value: "567", trend: "-2%", color: .orange)
+                        MetricCard(title: "Orders", value: "567", trend: "-2%", color: .red)
                     }
                     .padding(.horizontal)
 
