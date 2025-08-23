@@ -81,7 +81,7 @@ struct DashboardView: View {
                     // Metrics Cards
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 16) {
                         MetricCard(title: "Total Sales", value: "$12,345", trend: "+12%", color: .green)
-                        MetricCard(title: "New Users", value: "1,234", trend: "+8%", color: .blue)
+                        MetricCard(title: "New Users", value: "1,234", trend: "+8%", color: .black)
                         MetricCard(title: "Revenue", value: "$45,678", trend: "+15%", color: .purple)
                         MetricCard(title: "Orders", value: "567", trend: "-2%", color: .orange)
                     }
@@ -90,7 +90,7 @@ struct DashboardView: View {
                     // Chart Section
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
-                            Text("Analytics")
+                            Text("Analytics ")
                                 .font(.headline)
                             Spacer()
                             Picker("Metric", selection: $selectedMetric) {
